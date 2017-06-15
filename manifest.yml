@@ -1,0 +1,10 @@
+applications:
+- memory: 640M
+  services:
+  - oid-node-red-cloudantNoSQLDB
+  env:
+    NODE_RED_STORAGE_NAME: oid-node-red-cloudantNoSQLDB
+declared-services:
+  oid-node-red-cloudantNoSQLDB:
+    label: cloudantNoSQLDB
+    plan:  Lite
