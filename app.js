@@ -30,6 +30,12 @@ var cfenv = require('cfenv');
 var VCAP_APPLICATION = JSON.parse(process.env.VCAP_APPLICATION);
 var VCAP_SERVICES = JSON.parse(process.env.VCAP_SERVICES);
 
+var userDir = path.join(__dirname,".node-red");
+// Ensure userDir exists - something that is normally taken care of by
+// localfilesystem storage when running locally
+fs.mkdirSync(userDir);
+fs.mkdirSync(path.join(userDir,"node_modules"));
+
 
 // create a new express server
 var app = express();
@@ -108,6 +114,8 @@ var REDsettings = {
     mqttReconnectTime: 15000,
     serialReconnectTime: 15000,
     debugMaxLength: 1000,
+	
+    userDir: userDir,
 
     // Add the bluemix-specific nodes in
     nodesDir: path.join(__dirname,"nodes"),
