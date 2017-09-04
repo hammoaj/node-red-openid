@@ -30,12 +30,6 @@ var cfenv = require('cfenv');
 var VCAP_APPLICATION = JSON.parse(process.env.VCAP_APPLICATION);
 var VCAP_SERVICES = JSON.parse(process.env.VCAP_SERVICES);
 
-var userDir = path.join(__dirname,".node-red");
-// Ensure userDir exists - something that is normally taken care of by
-// localfilesystem storage when running locally
-fs.mkdirSync(userDir);
-fs.mkdirSync(path.join(userDir,"node_modules"));
-
 
 // create a new express server
 var app = express();
@@ -65,7 +59,7 @@ var Strategy = new OpenIDConnectStrategy({
                  skipUserProfile: true,
                  issuer: OIDsettings.issuer_id,
                  addCACert: true,
-		 CACertPathList: ['/oid.cer']
+		 CACertPathList: ['/oidc_w3id.cer']
                  },
          function(iss, sub, profile, accessToken, refreshToken, params, done)  {
 	        process.nextTick(function() {
@@ -109,13 +103,17 @@ app.get('/logout', function(req,res) {
         res.send("Logged out");
      });
 
+var userDir = path.join(__dirname,".node-red");
+// Ensure userDir exists - something that is normally taken care of by
+// localfilesystem storage when running locally
+fs.mkdirSync(userDir);
+fs.mkdirSync(path.join(userDir,"node_modules"));
 
-var REDsettings = {
+var settings = {
     mqttReconnectTime: 15000,
-    serialReconnectTime: 15000,
     debugMaxLength: 1000,
-	
-    userDir: userDir,
+
+
 
     // Add the bluemix-specific nodes in
     nodesDir: path.join(__dirname,"nodes"),
@@ -130,41 +128,44 @@ var REDsettings = {
     // paths
     httpAdminRoot: '/red',
     httpNodeRoot: '/',
-    
+
     // UI
     ui: { path: "ui" },
 
-    functionGlobalContext: { },
-
-    storageModule: require("./couchstorage")
+    functionGlobalContext: {
+			lodash:require('lodash')
+		}
 };
 
-REDsettings.couchAppname = VCAP_APPLICATION['application_name'];
-console.log("App name: " + REDsettings.couchAppname);
-var storageServiceName = process.env.NODE_RED_STORAGE_NAME || new RegExp("^"+REDsettings.couchAppname+".Cloudant");
-console.log("Storage service name: " + storageServiceName);
+// Look for the attached Cloudant instance to use for storage
+settings.couchAppname = appEnv.name;
+// NODE_RED_STORAGE_NAME is automatically set by this applications manifest.
+var storageServiceName = process.env.NODE_RED_STORAGE_NAME || new RegExp("^"+settings.couchAppname+".cloudantNoSQLDB");
 var couchService = appEnv.getService(storageServiceName);
 
 if (!couchService) {
-    console.log("Failed to find Cloudant service");
+    util.log("Failed to find Cloudant service: "+storageServiceName);
     if (process.env.NODE_RED_STORAGE_NAME) {
-        console.log(" - using NODE_RED_STORAGE_NAME environment variable: "+process.env.NODE_RED_STORAGE_NAME);
+        util.log(" - using NODE_RED_STORAGE_NAME environment variable: "+process.env.NODE_RED_STORAGE_NAME);
     }
-    throw new Error("No cloudant service found");
-}    
-REDsettings.couchUrl = couchService.credentials.url;
+    //fall back to localfilesystem storage
+} else {
+    util.log("Using Cloudant service: "+storageServiceName+" : "+settings.couchAppname);
+    settings.storageModule = require("./couchstorage");
+    settings.couchUrl = couchService.credentials.url;
+}
 
 // Create a server
 var server = http.createServer(app);
 
 // Initialise the runtime with a server and settings
-RED.init(server,REDsettings);
+RED.init(server,settings);
 
 // Serve the editor UI - must be authenticated
-app.use(REDsettings.httpAdminRoot, ensureAuthenticated, RED.httpAdmin);
+app.use(settings.httpAdminRoot, ensureAuthenticated, RED.httpAdmin);
 
 // Serve the http nodes UI (comment out following line if you require authenticated endpoint)
-app.use(REDsettings.httpNodeRoot, RED.httpNode);
+app.use(settings.httpNodeRoot, RED.httpNode);
 
 // Serve the http nodes UI (uncomment following line if you require authenticated endpoint - needed for authenticated dashboard)
 // app.use(REDsettings.httpNodeRoot, ensureAuthenticated, RED.httpNode);
